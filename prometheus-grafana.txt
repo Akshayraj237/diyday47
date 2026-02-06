@@ -1,0 +1,72 @@
+Phase 7: Observability Stack (kube-prometheus-stack)
+Components to Deploy
+Component	Purpose
+Prometheus	Metrics collection
+Grafana	Dashboards
+Alertmanager	Alert routing
+
+node_exporter	VM metrics (on VMs)
+Helm Charts Required
+Chart	Version	Namespace
+kube-prometheus-stack	Latest stable	monitoring
+
+Prometheus Configuration Required
+Scrape configs for VMs:
+
+- job_name: 'vm-node-exporter'
+  static_configs:
+    - targets:
+      - 'vm-hostname.internal:9100'
+  relabel_configs:
+    - source_labels: [__address__]
+      target_label: instance
+Service monitors for applications:
+
+Configure ServiceMonitor resources for each app
+Scrape interval: 30s for apps, 60s for infrastructure
+Alertmanager Configuration Required
+Setting	Value
+Slack webhook	Configure for team channel
+Resolve timeout	5m
+Group wait	30s
+Group interval	5m
+Repeat interval	12h
+Alert routing:
+
+Critical → Slack
+Warning → Slack only
+Info → Slack (optional)
+Grafana Dashboards Required
+Dashboard	Data Source	Purpose
+VM Infrastructure	Prometheus	CPU, memory, disk, network for VMs
+GKE Cluster	Prometheus	Cluster health, node status
+Application Metrics	Prometheus	App-specific metrics
+Cost Overview	Custom	Resource utilization
+
+
+VM Agent Installation
+On each VM, install:
+
+node_exporter - Exposes VM metrics on :9100
+
+
+Tasks
+
+Install kube-prometheus-stack via Helm
+
+Configure Prometheus to scrape VMs
+
+
+Configure Alertmanager with Slack
+
+Create VM infrastructure dashboard
+
+Create application dashboard
+
+Create security events dashboard
+
+Install node_exporter on all VMs
+
+
+Test alerts end-to-end
+

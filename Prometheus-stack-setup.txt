@@ -1,0 +1,265 @@
+
+This guide provides step-by-step instructions to manually deploy the **Observability Stack** (Prometheus, Grafana, Alertmanager) on a **GKE cluster**, and to install the **Node Exporter agent** on a **WireGuard VM**.
+
+---
+
+## Versions Used
+
+| Component             | Version                  |
+| --------------------- | ------------------------ |
+| kube-prometheus-stack | Latest stable (via Helm) |
+| node_exporter         | v1.10.2 (October 2025)   |
+
+---
+
+# 🚀 Part 1 – Install Observability Stack on GKE
+
+## Prerequisites
+
+Ensure the following tools are installed and configured:
+
+* `kubectl` connected to your GKE cluster
+* `helm` (v3+)
+
+---
+
+## Step 1 – Add Prometheus Community Helm Repository
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
+
+---
+
+## Step 2 – Prepare Configuration Values
+
+Open the configuration file:
+
+```bash
+manual-configs/monitoring-values.yaml
+```
+
+Update the following values:
+
+### 1. Slack Webhook URL
+
+Replace:
+
+```
+https://hooks.slack.com/...
+```
+
+with your actual Slack webhook URL.
+
+### 2. WireGuard VM IP
+
+Replace:
+
+```
+10.20.0.X:9100
+```
+
+with the internal IP of your WireGuard VM.
+
+To retrieve the IP:
+
+```bash
+gcloud compute instances describe wireguard-prod \
+  --zone us-central1-b \
+  --format="get(networkInterfaces[0].networkIP)"
+```
+
+---
+
+## Step 3 – Install the Stack
+
+Install the stack into the `monitoring` namespace:
+
+```bash
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --version 81.5.0 \
+  --create-namespace \
+  --namespace monitoring \
+  -f manual-configs/monitoring-values.yaml
+```
+
+> **Note:** If version `81.5.0` is not available, remove the `--version` flag to install the latest version.
+
+---
+
+## Step 4 – Verify Installation
+
+Check that all pods are running:
+
+```bash
+kubectl get pods -n monitoring
+```
+
+All pods should be in `Running` or `Completed` state.
+
+---
+
+# 🖥️ Part 2 – Install Node Exporter on WireGuard VM
+
+## Prerequisites
+
+* SSH access to the WireGuard VM
+
+---
+
+## Step 1 – SSH into the VM
+
+```bash
+gcloud compute ssh wireguard-prod \
+  --project <your-project-id> \
+  --zone us-central1-b
+```
+
+---
+
+## Step 2 – Download and Install Node Exporter
+
+Run the following commands on the VM:
+
+```bash
+# 1. Download the binary
+cd /tmp
+wget https://github.com/prometheus/node_exporter/releases/download/v1.10.2/node_exporter-1.10.2.linux-amd64.tar.gz
+
+# 2. Extract
+tar xvfz node_exporter-1.10.2.linux-amd64.tar.gz
+
+# 3. Move binary
+sudo mv node_exporter-1.10.2.linux-amd64/node_exporter /usr/local/bin/
+
+# 4. Create service user
+sudo useradd -rs /bin/false node_exporter
+```
+
+---
+
+## Step 3 – Create Systemd Service
+
+Create the service file:
+
+```bash
+sudo tee /etc/systemd/system/node_exporter.service <<EOF
+[Unit]
+Description=Node Exporter
+After=network.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+---
+
+## Step 4 – Start and Enable Service
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start node_exporter
+sudo systemctl enable node_exporter
+sudo systemctl status node_exporter
+```
+
+Expected output:
+
+```
+Active: active (running)
+```
+
+---
+
+# ✅ Part 3 – Verification & Access
+
+## 1. Access Grafana
+
+Port-forward Grafana:
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
+```
+
+Open in browser:
+
+```
+http://localhost:3000
+```
+
+**Default credentials:**
+
+| Field    | Value         |
+| -------- | ------------- |
+| Username | admin         |
+| Password | prom-operator |
+
+### Dashboards
+
+Navigate to:
+
+```
+Dashboards → Browse
+```
+
+You should see:
+
+* **VM Infrastructure**
+* **Kubernetes / Compute Resources**
+
+---
+
+## 2. Verify WireGuard Metrics
+
+In Grafana:
+
+1. Go to **Explore**
+2. Select **Prometheus**
+3. Run query:
+
+```promql
+up{job="vm-node-exporter"}
+```
+
+Expected result:
+
+```
+1
+```
+
+This confirms the VM is being scraped successfully.
+
+---
+
+## 3. Test Alerts
+
+Trigger a test alert:
+
+* Simulate high load on the VM, or
+* Create a temporary test alert in Alertmanager
+
+Verify that:
+
+* A notification appears in the configured **Slack channel**
+
+---
+
+# 🎯 Result
+
+You now have:
+
+* Full Kubernetes observability via **Prometheus**
+* Visual dashboards in **Grafana**
+* Alerting via **Alertmanager**
+* External VM monitoring via **Node Exporter**
+
+This completes the **manual Observability Stack deployment**.
