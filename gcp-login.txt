@@ -1,0 +1,41 @@
+gcloud auth application-default login
+
+$env:Path = "C:\terraform;" + $env:Path
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+terraform plan -var "project_id=skybyte-485704"
+
+gcloud auth application-default login --no-browser
+
+
+
+
+Get Policy
+
+
+gcloud projects get-iam-policy skybyte-485704 --flatten="bindings[].members" --filter="bindings.role:roles/iap.tunnelResourceAccessor"
+
+
+Set Policy
+
+gcloud projects add-iam-policy-binding skybyte-485704 --member="user:YOUR_EMAIL" --role="roles/iap.tunnelResourceAccessor"
+
+
+Check firewall rule network
+
+gcloud compute firewall-rules describe allow-iap-ssh
+
+
+
+gcloud resource-manager org-policies list --project=skybyte-485704 --filter="constraint:constraints/gcp.resourceLocations"
+
+
+Ubuntu 24.04 LTS Minimal
+
+
+
+
+
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --namespace monitoring -f "C:\Users\akrra\OneDrive\Desktop\Zeus\terraform-infra\gcp-terraform\manual-configs\monitoring-values.yaml"
+
